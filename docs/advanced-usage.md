@@ -278,7 +278,26 @@ steps:
 
 ### Multi-target builds
 
-`cache-dependency-path` isn’t limited to dependency files (like `go.sum`). It can also include files that capture build settings (for example, `GOOS`/`GOARCH`). This allows separate caches per target platform (OS/architecture) and helps avoid reusing caches across incompatible builds.
+For cross-compilation builds targeting different OS/architecture combinations, the build cache (`GOCACHE`) can be keyed per target using dedicated inputs: `target-os`, `target-architecture`, `target-amd64`, `target-arm64`, and `cgo`. This keeps build caches isolated per target without needing to manage environment-variable files manually.
+
+```yaml
+env:
+  GOOS: linux
+  GOARCH: arm64
+
+steps:
+  - uses: actions/checkout@v6
+  - uses: actions/setup-go@v6
+    with:
+      go-version: ‘1.25’
+      target-os: linux
+      target-architecture: arm64
+  - run: go build ./...
+```
+
+The `target-amd64` and `target-arm64` inputs accept [`GOAMD64`](https://pkg.go.dev/cmd/go#hdr-Build_constraints)/`GOARM64` microarchitecture levels (e.g. `v3`, `v8.1`) to create separate caches per micro-architecture. Set `cgo: false` to add a `-nocgo` suffix to the build cache key for `CGO_ENABLED=0` builds.
+
+If you are not using these dedicated inputs but need separate module-cache keys per target, you can include a file that captures the build settings in `cache-dependency-path`:
 
 ```yaml
 env:
@@ -291,16 +310,21 @@ steps:
   - uses: actions/checkout@v6
   - uses: actions/setup-go@v6
     with:
-      go-version: '1.25'
+      go-version: ‘1.25’
       cache-dependency-path: |
         go.sum
         env.txt
-  - run: go run hello.go    
+  - run: go run hello.go
 ```
 
-### Cache invalidation on source changes
+### Build cache invalidation on source changes
 
-Besides dependencies, the action can also cache build outputs (the [`GOCACHE`](https://pkg.go.dev/cmd/go#hdr-Build_and_test_caching) directory). By default, this cache is not updated based on source changes to help avoid unpredictable and frequent cache invalidation. To invalidate the cache when source files change, include source files in the `cache-dependency-path` input.
+The action caches the Go module cache (`GOMODCACHE`) and the Go build cache (`GOCACHE`) separately.
+
+- `cache-dependency-path` controls the **module cache** key.
+- `build-cache-dependency-path` controls the **build cache** key.
+
+By default the build cache key is hashed from `go.mod`. To invalidate the build cache when source files change, include source files in `build-cache-dependency-path`:
 
 > **Note:** Including patterns like `**/*.go` can create new caches on many commits, increasing cache storage and potentially slowing workflows due to more frequent uploads/downloads.
 
@@ -310,10 +334,10 @@ steps:
   - uses: actions/setup-go@v6
     with:
       go-version: '1.25'
-      cache-dependency-path: |
+      build-cache-dependency-path: |
         go.sum
         **/*.go
-  - run: go run hello.go
+  - run: go build ./...
 ```
 
 ### Restore-only caches
@@ -404,7 +428,7 @@ jobs:
 
 ### `cache-hit`
 
-**cache-hit** output is available with a boolean value that indicates whether a cache hit occurred on the primary key:
+**cache-hit** output is available with a boolean value that indicates whether a module cache hit occurred on the primary key:
 
 ```yaml
 jobs:
@@ -417,7 +441,25 @@ jobs:
         with:
           go-version: '1.24'
           cache: true
-      - run: echo "Was the Go cache restored? ${{ steps.go124.outputs.cache-hit }}" # true if cache-hit occurred
+      - run: echo "Was the Go module cache restored? ${{ steps.go124.outputs.cache-hit }}" # true if cache-hit occurred
+```
+
+### `build-cache-hit`
+
+**build-cache-hit** output is available with a boolean value that indicates whether a build cache hit occurred on the primary key:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        id: go124
+        with:
+          go-version: '1.24'
+          build-cache: true
+      - run: echo "Was the Go build cache restored? ${{ steps.go124.outputs.build-cache-hit }}" # true if build-cache-hit occurred
 ```
 
 ## Custom download URL

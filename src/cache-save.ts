@@ -2,7 +2,11 @@ import * as core from '@actions/core';
 import * as cache from '@actions/cache';
 import fs from 'fs';
 import {State} from './constants';
-import {getCacheDirectoryPath, getPackageManagerInfo} from './cache-utils';
+import {
+  getModuleCacheDirectoryPath,
+  getBuildCacheDirectoryPath,
+  getPackageManagerInfo
+} from './cache-utils';
 
 // Catch and log any unhandled exceptions.  These exceptions can leak out of the uploadChunk method in
 // @actions/toolkit when a failed upload closes the file descriptor causing any in-process reads to
@@ -19,12 +23,18 @@ process.on('uncaughtException', e => {
 export async function run(earlyExit?: boolean) {
   try {
     const cacheInput = core.getBooleanInput('cache');
-    if (cacheInput) {
-      await cachePackages();
+    const buildCacheInput = core.getBooleanInput('build-cache');
 
-      if (earlyExit) {
-        process.exit(0);
-      }
+    if (cacheInput) {
+      await cacheModules();
+    }
+
+    if (buildCacheInput) {
+      await cacheBuildArtifacts();
+    }
+
+    if ((cacheInput || buildCacheInput) && earlyExit) {
+      process.exit(0);
     }
   } catch (error) {
     let message = 'Unknown error!';
@@ -38,7 +48,7 @@ export async function run(earlyExit?: boolean) {
   }
 }
 
-const cachePackages = async () => {
+const cacheModules = async () => {
   const packageManager = 'default';
 
   const state = core.getState(State.CacheMatchedKey);
@@ -46,49 +56,68 @@ const cachePackages = async () => {
 
   const packageManagerInfo = await getPackageManagerInfo(packageManager);
 
-  const cachePaths = await getCacheDirectoryPath(packageManagerInfo);
+  const moduleCachePath = await getModuleCacheDirectoryPath(packageManagerInfo);
 
-  const nonExistingPaths = cachePaths.filter(
-    cachePath => !fs.existsSync(cachePath)
-  );
-
-  if (nonExistingPaths.length === cachePaths.length) {
-    core.warning('There are no cache folders on the disk');
+  if (!fs.existsSync(moduleCachePath)) {
+    core.warning('Module cache folder does not exist on disk');
     return;
-  }
-
-  if (nonExistingPaths.length) {
-    logWarning(
-      `Cache folder path is retrieved but doesn't exist on disk: ${nonExistingPaths.join(
-        ', '
-      )}`
-    );
   }
 
   if (!primaryKey) {
     core.info(
-      'Primary key was not generated. Please check the log messages above for more errors or information'
+      'Module cache primary key was not generated. Please check the log messages above for more errors or information'
     );
     return;
   }
 
   if (primaryKey === state) {
     core.info(
-      `Cache hit occurred on the primary key ${primaryKey}, not saving cache.`
+      `Module cache hit occurred on the primary key ${primaryKey}, not saving cache.`
     );
     return;
   }
 
-  const cacheId = await cache.saveCache(cachePaths, primaryKey);
+  const cacheId = await cache.saveCache([moduleCachePath], primaryKey);
   if (cacheId === -1) {
     return;
   }
-  core.info(`Cache saved with the key: ${primaryKey}`);
+  core.info(`Module cache saved with the key: ${primaryKey}`);
 };
 
-function logWarning(message: string): void {
-  const warningPrefix = '[warning]';
-  core.info(`${warningPrefix}${message}`);
-}
+const cacheBuildArtifacts = async () => {
+  const packageManager = 'default';
+
+  const state = core.getState(State.BuildCacheMatchedKey);
+  const primaryKey = core.getState(State.BuildCachePrimaryKey);
+
+  const packageManagerInfo = await getPackageManagerInfo(packageManager);
+
+  const buildCachePath = await getBuildCacheDirectoryPath(packageManagerInfo);
+
+  if (!fs.existsSync(buildCachePath)) {
+    core.warning('Build cache folder does not exist on disk');
+    return;
+  }
+
+  if (!primaryKey) {
+    core.info(
+      'Build cache primary key was not generated. Please check the log messages above for more errors or information'
+    );
+    return;
+  }
+
+  if (primaryKey === state) {
+    core.info(
+      `Build cache hit occurred on the primary key ${primaryKey}, not saving cache.`
+    );
+    return;
+  }
+
+  const cacheId = await cache.saveCache([buildCachePath], primaryKey);
+  if (cacheId === -1) {
+    return;
+  }
+  core.info(`Build cache saved with the key: ${primaryKey}`);
+};
 
 run(true);
