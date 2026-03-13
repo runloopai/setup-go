@@ -3,7 +3,7 @@ import * as io from '@actions/io';
 import * as installer from './installer';
 import * as semver from 'semver';
 import path from 'path';
-import {restoreCache} from './cache-restore';
+import { restoreCache, restoreBuildCache } from './cache-restore';
 import {isCacheFeatureAvailable} from './cache-utils';
 import cp from 'child_process';
 import fs from 'fs';
@@ -20,6 +20,7 @@ export async function run() {
     setGoToolchain();
 
     const cache = core.getBooleanInput('cache');
+    const buildCache = core.getBooleanInput('build-cache');
     core.info(`Setup go version spec ${versionSpec}`);
 
     let arch = core.getInput('architecture') as Architecture;
@@ -66,17 +67,50 @@ export async function run() {
     const goPath = await io.which('go');
     const goVersion = (cp.execSync(`${goPath} version`) || '').toString();
 
-    if (cache && isCacheFeatureAvailable()) {
+    if (isCacheFeatureAvailable()) {
       const packageManager = 'default';
-      const cacheDependencyPath = core.getInput('cache-dependency-path');
-      try {
-        await restoreCache(
-          parseGoVersion(goVersion),
-          packageManager,
-          cacheDependencyPath
+      const parsedGoVersion = parseGoVersion(goVersion);
+
+      if (cache) {
+        const cacheDependencyPath = core.getInput('cache-dependency-path');
+        try {
+          await restoreCache(
+            parsedGoVersion,
+            packageManager,
+            cacheDependencyPath
+          );
+        } catch (error) {
+          core.warning(
+            `Restore module cache failed: ${(error as Error).message}`
+          );
+        }
+      }
+
+      if (buildCache) {
+        const buildCacheDependencyPath = core.getInput(
+          'build-cache-dependency-path'
         );
-      } catch (error) {
-        core.warning(`Restore cache failed: ${(error as Error).message}`);
+        const targetOs = core.getInput('target-os');
+        const targetArchitecture = core.getInput('target-architecture');
+        const targetAmd64 = core.getInput('target-amd64');
+        const targetArm64 = core.getInput('target-arm64');
+        const cgo = core.getBooleanInput('cgo');
+        try {
+          await restoreBuildCache(
+            parsedGoVersion,
+            packageManager,
+            buildCacheDependencyPath,
+            targetOs,
+            targetArchitecture,
+            targetAmd64,
+            targetArm64,
+            cgo
+          );
+        } catch (error) {
+          core.warning(
+            `Restore build cache failed: ${(error as Error).message}`
+          );
+        }
       }
     }
 

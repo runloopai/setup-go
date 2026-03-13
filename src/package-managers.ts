@@ -4,12 +4,14 @@ type SupportedPackageManagers = {
 
 export interface PackageManagerInfo {
   dependencyFilePattern: string;
-  cacheFolderCommandList: string[];
+  moduleCacheFolderCommand: string;
+  buildCacheFolderCommand: string;
 }
 
 export const supportedPackageManagers: SupportedPackageManagers = {
   default: {
     dependencyFilePattern: 'go.mod',
-    cacheFolderCommandList: ['go env GOMODCACHE', 'go env GOCACHE']
+    moduleCacheFolderCommand: 'go env GOMODCACHE',
+    buildCacheFolderCommand: 'go env GOCACHE'
   }
 };

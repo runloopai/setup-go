@@ -13,17 +13,35 @@ inputs:
     description: Used to pull Go distributions from go-versions. Since there's a default, this is typically not supplied by the user. When running this action on github.com, the default value is sufficient. When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting.
     default: ${{ github.server_url == 'https://github.com' && github.token || '' }}
   cache:
-    description: Used to specify whether caching is needed. Set to true, if you'd like to enable caching.
+    description: Used to specify whether go module caching is needed. Set to true, if you'd like to enable caching.
     default: true
   cache-dependency-path:
-    description: 'Used to specify the path to a dependency file (e.g., go.mod, go.sum)'
+    description: 'Used to specify the path to a dependency file for module cache (e.g., go.mod, go.sum)'
+  build-cache:
+    description: Used to specify whether build caching is needed. Set to true, if you'd like to enable build caching.
+    default: true
+  build-cache-dependency-path:
+    description: 'Used to specify the path to a dependency file for build cache (e.g., go.mod, go.sum)'
   architecture:
     description: 'Target architecture for Go to use. Examples: x86, x64. Will use system architecture by default.'
+  target-os:
+    description: 'Target OS for build cache key. Examples: linux, darwin, windows. Will use runner OS by default.'
+  target-architecture:
+    description: 'Target architecture for build cache key. Examples: amd64, arm64, 386. Will use system architecture by default.'
+  target-amd64:
+    description: 'GOAMD64 microarchitecture level for build cache key. Examples: v1, v2, v3, v4.'
+  target-arm64:
+    description: 'GOARM64 microarchitecture level for build cache key. Examples: v8.0, v8.1, v9.0.'
+  cgo:
+    description: 'Whether CGO is enabled for build cache key. Set to false for CGO_ENABLED=0 builds.'
+    default: true
 outputs:
   go-version:
     description: 'The installed Go version. Useful when given a version range as input.'
   cache-hit:
-    description: 'A boolean value to indicate if a cache was hit'
+    description: 'A boolean value to indicate if a module cache was hit'
+  build-cache-hit:
+    description: 'A boolean value to indicate if a build cache was hit'
 runs:
   using: 'node24'
   main: 'dist/setup/index.js'

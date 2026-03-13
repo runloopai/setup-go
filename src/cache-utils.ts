@@ -31,32 +31,26 @@ export const getPackageManagerInfo = async (packageManager: string) => {
   return obtainedPackageManager;
 };
 
-export const getCacheDirectoryPath = async (
+export const getModuleCacheDirectoryPath = async (
   packageManagerInfo: PackageManagerInfo
-) => {
-  const pathOutputs = await Promise.allSettled(
-    packageManagerInfo.cacheFolderCommandList.map(async command =>
-      getCommandOutput(command)
-    )
-  );
-
-  const results = pathOutputs.map(item => {
-    if (item.status === 'fulfilled') {
-      return item.value;
-    } else {
-      core.info(`[warning]getting cache directory path failed: ${item.reason}`);
-    }
-
-    return '';
-  });
-
-  const cachePaths = results.filter(item => item);
-
-  if (!cachePaths.length) {
-    throw new Error(`Could not get cache folder paths.`);
+): Promise<string> => {
+  try {
+    return await getCommandOutput(packageManagerInfo.moduleCacheFolderCommand);
+  } catch (error) {
+    core.info(`[warning]getting module cache directory path failed: ${error}`);
+    throw new Error(`Could not get module cache folder path.`);
   }
+};
 
-  return cachePaths;
+export const getBuildCacheDirectoryPath = async (
+  packageManagerInfo: PackageManagerInfo
+): Promise<string> => {
+  try {
+    return await getCommandOutput(packageManagerInfo.buildCacheFolderCommand);
+  } catch (error) {
+    core.info(`[warning]getting build cache directory path failed: ${error}`);
+    throw new Error(`Could not get build cache folder path.`);
+  }
 };
 
 export function isGhes(): boolean {

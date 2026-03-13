@@ -44077,11 +44077,15 @@ function run(earlyExit) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const cacheInput = core.getBooleanInput('cache');
+            const buildCacheInput = core.getBooleanInput('build-cache');
             if (cacheInput) {
-                yield cachePackages();
-                if (earlyExit) {
-                    process.exit(0);
-                }
+                yield cacheModules();
+            }
+            if (buildCacheInput) {
+                yield cacheBuildArtifacts();
+            }
+            if ((cacheInput || buildCacheInput) && earlyExit) {
+                process.exit(0);
             }
         }
         catch (error) {
@@ -44096,38 +44100,54 @@ function run(earlyExit) {
         }
     });
 }
-const cachePackages = () => __awaiter(void 0, void 0, void 0, function* () {
+const cacheModules = () => __awaiter(void 0, void 0, void 0, function* () {
     const packageManager = 'default';
     const state = core.getState(constants_1.State.CacheMatchedKey);
     const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
     const packageManagerInfo = yield (0, cache_utils_1.getPackageManagerInfo)(packageManager);
-    const cachePaths = yield (0, cache_utils_1.getCacheDirectoryPath)(packageManagerInfo);
-    const nonExistingPaths = cachePaths.filter(cachePath => !fs_1.default.existsSync(cachePath));
-    if (nonExistingPaths.length === cachePaths.length) {
-        core.warning('There are no cache folders on the disk');
+    const moduleCachePath = yield (0, cache_utils_1.getModuleCacheDirectoryPath)(packageManagerInfo);
+    if (!fs_1.default.existsSync(moduleCachePath)) {
+        core.warning('Module cache folder does not exist on disk');
         return;
     }
-    if (nonExistingPaths.length) {
-        logWarning(`Cache folder path is retrieved but doesn't exist on disk: ${nonExistingPaths.join(', ')}`);
-    }
     if (!primaryKey) {
-        core.info('Primary key was not generated. Please check the log messages above for more errors or information');
+        core.info('Module cache primary key was not generated. Please check the log messages above for more errors or information');
         return;
     }
     if (primaryKey === state) {
-        core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+        core.info(`Module cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
         return;
     }
-    const cacheId = yield cache.saveCache(cachePaths, primaryKey);
+    const cacheId = yield cache.saveCache([moduleCachePath], primaryKey);
     if (cacheId === -1) {
         return;
     }
-    core.info(`Cache saved with the key: ${primaryKey}`);
+    core.info(`Module cache saved with the key: ${primaryKey}`);
 });
-function logWarning(message) {
-    const warningPrefix = '[warning]';
-    core.info(`${warningPrefix}${message}`);
-}
+const cacheBuildArtifacts = () => __awaiter(void 0, void 0, void 0, function* () {
+    const packageManager = 'default';
+    const state = core.getState(constants_1.State.BuildCacheMatchedKey);
+    const primaryKey = core.getState(constants_1.State.BuildCachePrimaryKey);
+    const packageManagerInfo = yield (0, cache_utils_1.getPackageManagerInfo)(packageManager);
+    const buildCachePath = yield (0, cache_utils_1.getBuildCacheDirectoryPath)(packageManagerInfo);
+    if (!fs_1.default.existsSync(buildCachePath)) {
+        core.warning('Build cache folder does not exist on disk');
+        return;
+    }
+    if (!primaryKey) {
+        core.info('Build cache primary key was not generated. Please check the log messages above for more errors or information');
+        return;
+    }
+    if (primaryKey === state) {
+        core.info(`Build cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+        return;
+    }
+    const cacheId = yield cache.saveCache([buildCachePath], primaryKey);
+    if (cacheId === -1) {
+        return;
+    }
+    core.info(`Build cache saved with the key: ${primaryKey}`);
+});
 run(true);
 
 
@@ -44181,7 +44201,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getCacheDirectoryPath = exports.getPackageManagerInfo = exports.getCommandOutput = void 0;
+exports.getBuildCacheDirectoryPath = exports.getModuleCacheDirectoryPath = exports.getPackageManagerInfo = exports.getCommandOutput = void 0;
 exports.isGhes = isGhes;
 exports.isCacheFeatureAvailable = isCacheFeatureAvailable;
 const cache = __importStar(__nccwpck_require__(5116));
@@ -44207,24 +44227,26 @@ const getPackageManagerInfo = (packageManager) => __awaiter(void 0, void 0, void
     return obtainedPackageManager;
 });
 exports.getPackageManagerInfo = getPackageManagerInfo;
-const getCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
-    const pathOutputs = yield Promise.allSettled(packageManagerInfo.cacheFolderCommandList.map((command) => __awaiter(void 0, void 0, void 0, function* () { return (0, exports.getCommandOutput)(command); })));
-    const results = pathOutputs.map(item => {
-        if (item.status === 'fulfilled') {
-            return item.value;
-        }
-        else {
-            core.info(`[warning]getting cache directory path failed: ${item.reason}`);
-        }
-        return '';
-    });
-    const cachePaths = results.filter(item => item);
-    if (!cachePaths.length) {
-        throw new Error(`Could not get cache folder paths.`);
+const getModuleCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        return yield (0, exports.getCommandOutput)(packageManagerInfo.moduleCacheFolderCommand);
     }
-    return cachePaths;
+    catch (error) {
+        core.info(`[warning]getting module cache directory path failed: ${error}`);
+        throw new Error(`Could not get module cache folder path.`);
+    }
 });
-exports.getCacheDirectoryPath = getCacheDirectoryPath;
+exports.getModuleCacheDirectoryPath = getModuleCacheDirectoryPath;
+const getBuildCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        return yield (0, exports.getCommandOutput)(packageManagerInfo.buildCacheFolderCommand);
+    }
+    catch (error) {
+        core.info(`[warning]getting build cache directory path failed: ${error}`);
+        throw new Error(`Could not get build cache folder path.`);
+    }
+});
+exports.getBuildCacheDirectoryPath = getBuildCacheDirectoryPath;
 function isGhes() {
     const ghUrl = new URL(process.env['GITHUB_SERVER_URL'] || 'https://github.com');
     const hostname = ghUrl.hostname.trimEnd().toUpperCase();
@@ -44259,10 +44281,13 @@ var State;
 (function (State) {
     State["CachePrimaryKey"] = "CACHE_KEY";
     State["CacheMatchedKey"] = "CACHE_RESULT";
+    State["BuildCachePrimaryKey"] = "BUILD_CACHE_KEY";
+    State["BuildCacheMatchedKey"] = "BUILD_CACHE_RESULT";
 })(State || (exports.State = State = {}));
 var Outputs;
 (function (Outputs) {
     Outputs["CacheHit"] = "cache-hit";
+    Outputs["BuildCacheHit"] = "build-cache-hit";
 })(Outputs || (exports.Outputs = Outputs = {}));
 
 
@@ -44278,7 +44303,8 @@ exports.supportedPackageManagers = void 0;
 exports.supportedPackageManagers = {
     default: {
         dependencyFilePattern: 'go.mod',
-        cacheFolderCommandList: ['go env GOMODCACHE', 'go env GOCACHE']
+        moduleCacheFolderCommand: 'go env GOMODCACHE',
+        buildCacheFolderCommand: 'go env GOCACHE'
     }
 };
 

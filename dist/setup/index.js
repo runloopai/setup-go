@@ -49325,7 +49325,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.restoreCache = void 0;
+exports.restoreBuildCache = exports.restoreCache = void 0;
 const cache = __importStar(__nccwpck_require__(5116));
 const core = __importStar(__nccwpck_require__(37484));
 const glob = __importStar(__nccwpck_require__(47206));
@@ -49336,8 +49336,7 @@ const cache_utils_1 = __nccwpck_require__(4673);
 const restoreCache = (versionSpec, packageManager, cacheDependencyPath) => __awaiter(void 0, void 0, void 0, function* () {
     const packageManagerInfo = yield (0, cache_utils_1.getPackageManagerInfo)(packageManager);
     const platform = process.env.RUNNER_OS;
-    const arch = process.arch;
-    const cachePaths = yield (0, cache_utils_1.getCacheDirectoryPath)(packageManagerInfo);
+    const moduleCachePath = yield (0, cache_utils_1.getModuleCacheDirectoryPath)(packageManagerInfo);
     const dependencyFilePath = cacheDependencyPath
         ? cacheDependencyPath
         : findDependencyFile(packageManagerInfo);
@@ -49346,20 +49345,77 @@ const restoreCache = (versionSpec, packageManager, cacheDependencyPath) => __awa
         throw new Error('Some specified paths were not resolved, unable to cache dependencies.');
     }
     const linuxVersion = process.env.RUNNER_OS === 'Linux' ? `${process.env.ImageOS}-` : '';
-    const primaryKey = `setup-go-${platform}-${arch}-${linuxVersion}go-${versionSpec}-${fileHash}`;
-    core.debug(`primary key is ${primaryKey}`);
+    const primaryKey = `setup-go-${platform}-${linuxVersion}go-${versionSpec}-${fileHash}`;
+    core.debug(`module cache primary key is ${primaryKey}`);
     core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
-    const cacheKey = yield cache.restoreCache(cachePaths, primaryKey);
+    const cacheKey = yield cache.restoreCache([moduleCachePath], primaryKey);
     core.setOutput(constants_1.Outputs.CacheHit, Boolean(cacheKey));
     if (!cacheKey) {
-        core.info(`Cache is not found`);
+        core.info(`Module cache is not found`);
         core.setOutput(constants_1.Outputs.CacheHit, false);
         return;
     }
     core.saveState(constants_1.State.CacheMatchedKey, cacheKey);
-    core.info(`Cache restored from key: ${cacheKey}`);
+    core.info(`Module cache restored from key: ${cacheKey}`);
 });
 exports.restoreCache = restoreCache;
+// Normalize GitHub runner OS to Go OS values
+const normalizeOs = (os) => {
+    const osMap = {
+        Linux: 'linux',
+        Windows: 'windows',
+        macOS: 'darwin'
+    };
+    return osMap[os] || os.toLowerCase();
+};
+// Normalize GitHub runner arch to Go arch values
+const normalizeArch = (arch) => {
+    const archMap = {
+        ia32: '386',
+        x64: 'amd64',
+        arm: 'arm',
+        arm64: 'arm64'
+    };
+    return archMap[arch] || arch;
+};
+const restoreBuildCache = (versionSpec_1, packageManager_1, buildCacheDependencyPath_1, targetOsInput_1, targetArchInput_1, targetAmd64_1, targetArm64_1, ...args_1) => __awaiter(void 0, [versionSpec_1, packageManager_1, buildCacheDependencyPath_1, targetOsInput_1, targetArchInput_1, targetAmd64_1, targetArm64_1, ...args_1], void 0, function* (versionSpec, packageManager, buildCacheDependencyPath, targetOsInput, targetArchInput, targetAmd64, targetArm64, cgo = true) {
+    const packageManagerInfo = yield (0, cache_utils_1.getPackageManagerInfo)(packageManager);
+    // Use input if provided, otherwise normalize runner values
+    const targetOs = targetOsInput || normalizeOs(process.env.RUNNER_OS || '');
+    const targetArch = targetArchInput || normalizeArch(process.arch);
+    // Get microarchitecture level for amd64/arm64
+    let microArch = '';
+    if (targetArch === 'amd64' && targetAmd64) {
+        microArch = `-${targetAmd64}`;
+    }
+    else if (targetArch === 'arm64' && targetArm64) {
+        microArch = `-${targetArm64}`;
+    }
+    // CGO suffix for cache key
+    const cgoSuffix = cgo ? '' : '-nocgo';
+    const buildCachePath = yield (0, cache_utils_1.getBuildCacheDirectoryPath)(packageManagerInfo);
+    const dependencyFilePath = buildCacheDependencyPath
+        ? buildCacheDependencyPath
+        : findDependencyFile(packageManagerInfo);
+    const fileHash = yield glob.hashFiles(dependencyFilePath);
+    if (!fileHash) {
+        throw new Error('Some specified paths were not resolved, unable to cache build artifacts.');
+    }
+    const linuxVersion = process.env.RUNNER_OS === 'Linux' ? `${process.env.ImageOS}-` : '';
+    const primaryKey = `setup-go-${targetOs}-${targetArch}${microArch}${cgoSuffix}-${linuxVersion}go-${versionSpec}-build-${fileHash}`;
+    core.debug(`build cache primary key is ${primaryKey}`);
+    core.saveState(constants_1.State.BuildCachePrimaryKey, primaryKey);
+    const cacheKey = yield cache.restoreCache([buildCachePath], primaryKey);
+    core.setOutput(constants_1.Outputs.BuildCacheHit, Boolean(cacheKey));
+    if (!cacheKey) {
+        core.info(`Build cache is not found`);
+        core.setOutput(constants_1.Outputs.BuildCacheHit, false);
+        return;
+    }
+    core.saveState(constants_1.State.BuildCacheMatchedKey, cacheKey);
+    core.info(`Build cache restored from key: ${cacheKey}`);
+});
+exports.restoreBuildCache = restoreBuildCache;
 const findDependencyFile = (packageManager) => {
     const dependencyFile = packageManager.dependencyFilePattern;
     const workspace = process.env.GITHUB_WORKSPACE;
@@ -49422,7 +49478,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getCacheDirectoryPath = exports.getPackageManagerInfo = exports.getCommandOutput = void 0;
+exports.getBuildCacheDirectoryPath = exports.getModuleCacheDirectoryPath = exports.getPackageManagerInfo = exports.getCommandOutput = void 0;
 exports.isGhes = isGhes;
 exports.isCacheFeatureAvailable = isCacheFeatureAvailable;
 const cache = __importStar(__nccwpck_require__(5116));
@@ -49448,24 +49504,26 @@ const getPackageManagerInfo = (packageManager) => __awaiter(void 0, void 0, void
     return obtainedPackageManager;
 });
 exports.getPackageManagerInfo = getPackageManagerInfo;
-const getCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
-    const pathOutputs = yield Promise.allSettled(packageManagerInfo.cacheFolderCommandList.map((command) => __awaiter(void 0, void 0, void 0, function* () { return (0, exports.getCommandOutput)(command); })));
-    const results = pathOutputs.map(item => {
-        if (item.status === 'fulfilled') {
-            return item.value;
-        }
-        else {
-            core.info(`[warning]getting cache directory path failed: ${item.reason}`);
-        }
-        return '';
-    });
-    const cachePaths = results.filter(item => item);
-    if (!cachePaths.length) {
-        throw new Error(`Could not get cache folder paths.`);
+const getModuleCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        return yield (0, exports.getCommandOutput)(packageManagerInfo.moduleCacheFolderCommand);
     }
-    return cachePaths;
+    catch (error) {
+        core.info(`[warning]getting module cache directory path failed: ${error}`);
+        throw new Error(`Could not get module cache folder path.`);
+    }
 });
-exports.getCacheDirectoryPath = getCacheDirectoryPath;
+exports.getModuleCacheDirectoryPath = getModuleCacheDirectoryPath;
+const getBuildCacheDirectoryPath = (packageManagerInfo) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        return yield (0, exports.getCommandOutput)(packageManagerInfo.buildCacheFolderCommand);
+    }
+    catch (error) {
+        core.info(`[warning]getting build cache directory path failed: ${error}`);
+        throw new Error(`Could not get build cache folder path.`);
+    }
+});
+exports.getBuildCacheDirectoryPath = getBuildCacheDirectoryPath;
 function isGhes() {
     const ghUrl = new URL(process.env['GITHUB_SERVER_URL'] || 'https://github.com');
     const hostname = ghUrl.hostname.trimEnd().toUpperCase();
@@ -49500,10 +49558,13 @@ var State;
 (function (State) {
     State["CachePrimaryKey"] = "CACHE_KEY";
     State["CacheMatchedKey"] = "CACHE_RESULT";
+    State["BuildCachePrimaryKey"] = "BUILD_CACHE_KEY";
+    State["BuildCacheMatchedKey"] = "BUILD_CACHE_RESULT";
 })(State || (exports.State = State = {}));
 var Outputs;
 (function (Outputs) {
     Outputs["CacheHit"] = "cache-hit";
+    Outputs["BuildCacheHit"] = "build-cache-hit";
 })(Outputs || (exports.Outputs = Outputs = {}));
 
 
@@ -50048,6 +50109,7 @@ function run() {
             const versionSpec = resolveVersionInput();
             setGoToolchain();
             const cache = core.getBooleanInput('cache');
+            const buildCache = core.getBooleanInput('build-cache');
             core.info(`Setup go version spec ${versionSpec}`);
             let arch = core.getInput('architecture');
             if (!arch) {
@@ -50076,14 +50138,31 @@ function run() {
             core.debug(`add bin ${added}`);
             const goPath = yield io.which('go');
             const goVersion = (child_process_1.default.execSync(`${goPath} version`) || '').toString();
-            if (cache && (0, cache_utils_1.isCacheFeatureAvailable)()) {
+            if ((0, cache_utils_1.isCacheFeatureAvailable)()) {
                 const packageManager = 'default';
-                const cacheDependencyPath = core.getInput('cache-dependency-path');
-                try {
-                    yield (0, cache_restore_1.restoreCache)(parseGoVersion(goVersion), packageManager, cacheDependencyPath);
+                const parsedGoVersion = parseGoVersion(goVersion);
+                if (cache) {
+                    const cacheDependencyPath = core.getInput('cache-dependency-path');
+                    try {
+                        yield (0, cache_restore_1.restoreCache)(parsedGoVersion, packageManager, cacheDependencyPath);
+                    }
+                    catch (error) {
+                        core.warning(`Restore module cache failed: ${error.message}`);
+                    }
                 }
-                catch (error) {
-                    core.warning(`Restore cache failed: ${error.message}`);
+                if (buildCache) {
+                    const buildCacheDependencyPath = core.getInput('build-cache-dependency-path');
+                    const targetOs = core.getInput('target-os');
+                    const targetArchitecture = core.getInput('target-architecture');
+                    const targetAmd64 = core.getInput('target-amd64');
+                    const targetArm64 = core.getInput('target-arm64');
+                    const cgo = core.getBooleanInput('cgo');
+                    try {
+                        yield (0, cache_restore_1.restoreBuildCache)(parsedGoVersion, packageManager, buildCacheDependencyPath, targetOs, targetArchitecture, targetAmd64, targetArm64, cgo);
+                    }
+                    catch (error) {
+                        core.warning(`Restore build cache failed: ${error.message}`);
+                    }
                 }
             }
             // add problem matchers
@@ -50182,7 +50261,8 @@ exports.supportedPackageManagers = void 0;
 exports.supportedPackageManagers = {
     default: {
         dependencyFilePattern: 'go.mod',
-        cacheFolderCommandList: ['go env GOMODCACHE', 'go env GOCACHE']
+        moduleCacheFolderCommand: 'go env GOMODCACHE',
+        buildCacheFolderCommand: 'go env GOCACHE'
     }
 };
 

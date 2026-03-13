@@ -48,7 +48,8 @@ describe('getPackageManagerInfo', () => {
     const packageManagerName = 'default';
     const expectedResult = {
       dependencyFilePattern: 'go.mod',
-      cacheFolderCommandList: ['go env GOMODCACHE', 'go env GOCACHE']
+      moduleCacheFolderCommand: 'go env GOMODCACHE',
+      buildCacheFolderCommand: 'go env GOCACHE'
     };
 
     //Act + Assert
@@ -68,67 +69,69 @@ describe('getPackageManagerInfo', () => {
   });
 });
 
-describe('getCacheDirectoryPath', () => {
+describe('getModuleCacheDirectoryPath', () => {
   //Arrange
   const getExecOutputSpy = jest.spyOn(exec, 'getExecOutput');
 
   const validPackageManager: PackageManagerInfo = {
     dependencyFilePattern: 'go.mod',
-    cacheFolderCommandList: ['go env GOMODCACHE', 'go env GOCACHE']
+    moduleCacheFolderCommand: 'go env GOMODCACHE',
+    buildCacheFolderCommand: 'go env GOCACHE'
   };
 
-  it('should return path to the cache folders which specified package manager uses', async () => {
+  it('should return path to the module cache folder', async () => {
     //Arrange
     getExecOutputSpy.mockImplementation((commandLine: string) => {
       return new Promise<exec.ExecOutput>(resolve => {
-        resolve({exitCode: 0, stdout: 'path/to/cache/folder', stderr: ''});
+        resolve({ exitCode: 0, stdout: 'path/to/module/cache', stderr: '' });
       });
     });
-
-    const expectedResult = ['path/to/cache/folder', 'path/to/cache/folder'];
 
     //Act + Assert
     return cacheUtils
-      .getCacheDirectoryPath(validPackageManager)
-      .then(data => expect(data).toEqual(expectedResult));
+      .getModuleCacheDirectoryPath(validPackageManager)
+      .then(data => expect(data).toEqual('path/to/module/cache'));
   });
 
-  it('should return path to the cache folder if one command return empty str', async () => {
-    //Arrange
-    getExecOutputSpy.mockImplementationOnce((commandLine: string) => {
-      return new Promise<exec.ExecOutput>(resolve => {
-        resolve({exitCode: 0, stdout: 'path/to/cache/folder', stderr: ''});
-      });
-    });
-
-    getExecOutputSpy.mockImplementationOnce((commandLine: string) => {
-      return new Promise<exec.ExecOutput>(resolve => {
-        resolve({exitCode: 0, stdout: '', stderr: ''});
-      });
-    });
-
-    const expectedResult = ['path/to/cache/folder'];
-
-    //Act + Assert
-    return cacheUtils
-      .getCacheDirectoryPath(validPackageManager)
-      .then(data => expect(data).toEqual(expectedResult));
-  });
-
-  it('should throw if the both commands return empty str', async () => {
+  it('should throw if the command fails', async () => {
     getExecOutputSpy.mockImplementation((commandLine: string) => {
       return new Promise<exec.ExecOutput>(resolve => {
-        resolve({exitCode: 10, stdout: '', stderr: ''});
+        resolve({ exitCode: 10, stdout: '', stderr: 'Error message' });
       });
     });
 
     //Act + Assert
     await expect(async () => {
-      await cacheUtils.getCacheDirectoryPath(validPackageManager);
+      await cacheUtils.getModuleCacheDirectoryPath(validPackageManager);
     }).rejects.toThrow();
   });
+});
 
-  it('should throw if the specified package name is invalid', async () => {
+describe('getBuildCacheDirectoryPath', () => {
+  //Arrange
+  const getExecOutputSpy = jest.spyOn(exec, 'getExecOutput');
+
+  const validPackageManager: PackageManagerInfo = {
+    dependencyFilePattern: 'go.mod',
+    moduleCacheFolderCommand: 'go env GOMODCACHE',
+    buildCacheFolderCommand: 'go env GOCACHE'
+  };
+
+  it('should return path to the build cache folder', async () => {
+  //Arrange
+    getExecOutputSpy.mockImplementation((commandLine: string) => {
+      return new Promise<exec.ExecOutput>(resolve => {
+        resolve({ exitCode: 0, stdout: 'path/to/build/cache', stderr: '' });
+      });
+    });
+
+    //Act + Assert
+    return cacheUtils
+      .getBuildCacheDirectoryPath(validPackageManager)
+      .then(data => expect(data).toEqual('path/to/build/cache'));
+  });
+
+  it('should throw if the command fails', async () => {
     getExecOutputSpy.mockImplementation((commandLine: string) => {
       return new Promise<exec.ExecOutput>(resolve => {
         resolve({exitCode: 10, stdout: '', stderr: 'Error message'});
@@ -137,7 +140,7 @@ describe('getCacheDirectoryPath', () => {
 
     //Act + Assert
     await expect(async () => {
-      await cacheUtils.getCacheDirectoryPath(validPackageManager);
+      await cacheUtils.getBuildCacheDirectoryPath(validPackageManager);
     }).rejects.toThrow();
   });
 });
